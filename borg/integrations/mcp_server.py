@@ -557,8 +557,76 @@ TOOLS: List[Dict[str, Any]] = [
                     "type": "string",
                     "description": "The error message to look up in failure memory.",
                 },
+                "agent_id": {
+                    "type": "string",
+                    "description": "Agent namespace to search. Defaults to 'default'.",
+                    "default": "default",
+                },
             },
             "required": ["error_message"],
+        },
+    },
+    {
+        "name": "borg_record_failure",
+        "description": (
+            "Record a failure or success outcome for an error pattern in collective failure memory. "
+            "This writes to the failure memory store so other agents can benefit from the learning. "
+            "Call this after attempting a fix — record 'success' if it worked, 'failure' if it did not."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "error_pattern": {
+                    "type": "string",
+                    "description": "The error message or pattern encountered (e.g. \"NoneType has no attribute 'split'\").",
+                },
+                "pack_id": {
+                    "type": "string",
+                    "description": "The borg pack being used (e.g. 'systematic-debugging').",
+                },
+                "phase": {
+                    "type": "string",
+                    "description": "The phase being executed when the error occurred (e.g. 'investigate_root_cause').",
+                },
+                "approach": {
+                    "type": "string",
+                    "description": "What the agent tried to fix the error (e.g. 'Added if val is not None check').",
+                },
+                "outcome": {
+                    "type": "string",
+                    "enum": ["success", "failure"],
+                    "description": "Result of the approach: 'success' or 'failure'.",
+                },
+                "agent_id": {
+                    "type": "string",
+                    "description": "Agent namespace to write to. Defaults to 'default'.",
+                    "default": "default",
+                },
+            },
+            "required": ["error_pattern", "pack_id", "phase", "approach", "outcome"],
+        },
+    },
+    {
+        "name": "borg_delete_failure",
+        "description": (
+            "Delete a failure memory record for an error pattern. "
+            "Use this to retract wrong entries or clear test data. "
+            "Returns success=True if deleted, success=True with found=False if not found."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "error_pattern": {
+                    "type": "string",
+                    "description": "The error pattern whose record should be deleted.",
+                },
+                "agent_id": {
+                    "type": "string",
+                    "description": "Agent namespace to delete from. Defaults to 'default'.",
+                    "default": "default",
+                },
+            },
+            "required": ["error_pattern"],
         },
     },
     {
@@ -1769,7 +1837,7 @@ def borg_context(project_path: str = ".", hours: int = 24) -> str:
         return json.dumps({"success": False, "error": str(e), "type": type(e).__name__})
 
 
-def borg_recall(error_message: str = "") -> str:
+def borg_recall(error_message: str = "", agent_id: str = "default") -> str:
     """Recall collective failure memory for an error.
 
     Returns approaches that other agents tried and failed, as well as
@@ -1777,6 +1845,7 @@ def borg_recall(error_message: str = "") -> str:
 
     Args:
         error_message: The error message to look up in failure memory.
+        agent_id:     Agent namespace to search. Defaults to "default".
 
     Returns:
         JSON string with wrong_approaches (sorted by frequency) and
@@ -1789,7 +1858,7 @@ def borg_recall(error_message: str = "") -> str:
             return json.dumps({"success": False, "error": "error_message is required"})
 
         fm = FailureMemory()
-        result = fm.recall(error_message)
+        result = fm.recall(error_message, agent_id=agent_id)
 
         if result is None:
             return json.dumps({
@@ -1804,9 +1873,97 @@ def borg_recall(error_message: str = "") -> str:
             "success": True,
             "found": True,
             "error_pattern": result.get("error_pattern", ""),
+            "agent_id": result.get("agent_id", agent_id),
             "wrong_approaches": result.get("wrong_approaches", []),
             "correct_approaches": result.get("correct_approaches", []),
             "total_sessions": result.get("total_sessions", 0),
+        })
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except (ValueError, KeyError, OSError, json.JSONDecodeError) as e:
+        return json.dumps({"success": False, "error": str(e), "type": type(e).__name__})
+
+
+def borg_record_failure(
+    error_pattern: str = "",
+    pack_id: str = "",
+    phase: str = "",
+    approach: str = "",
+    outcome: str = "",
+    agent_id: str = "default",
+) -> str:
+    """Record a failure or success outcome for an error pattern.
+
+    Writes to the failure memory store so other agents can benefit from the learning.
+    Call this after attempting a fix — record 'success' if it worked, 'failure' if not.
+
+    Args:
+        error_pattern: The error message or pattern encountered.
+        pack_id:      The borg pack being used (e.g. 'systematic-debugging').
+        phase:        The phase being executed when the error occurred.
+        approach:    What the agent tried to fix the error.
+        outcome:     Either 'success' or 'failure'.
+        agent_id:    Agent namespace to write to. Defaults to 'default'.
+
+    Returns:
+        JSON string with success=True and the recorded entry, or success=False on error.
+    """
+    try:
+        from borg.core.failure_memory import FailureMemory
+
+        if not error_pattern:
+            return json.dumps({"success": False, "error": "error_pattern is required"})
+
+        fm = FailureMemory()
+        fm.record_failure(
+            error_pattern=error_pattern,
+            pack_id=pack_id,
+            phase=phase,
+            approach=approach,
+            outcome=outcome,
+            agent_id=agent_id,
+        )
+        return json.dumps({
+            "success": True,
+            "recorded": True,
+            "error_pattern": error_pattern,
+            "agent_id": agent_id,
+        })
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except ValueError as e:
+        return json.dumps({"success": False, "error": str(e), "type": "ValueError"})
+    except (KeyError, OSError, json.JSONDecodeError) as e:
+        return json.dumps({"success": False, "error": str(e), "type": type(e).__name__})
+
+
+def borg_delete_failure(error_pattern: str = "", agent_id: str = "default") -> str:
+    """Delete a failure memory record for an error pattern.
+
+    Use this to retract wrong entries or clear test data.
+
+    Args:
+        error_pattern: The error pattern whose record should be deleted.
+        agent_id:     Agent namespace to delete from. Defaults to 'default'.
+
+    Returns:
+        JSON string: {"success": True, "deleted": True} if found and deleted,
+        {"success": True, "deleted": False} if not found,
+        or {"success": False, "error": ...} on error.
+    """
+    try:
+        from borg.core.failure_memory import FailureMemory
+
+        if not error_pattern:
+            return json.dumps({"success": False, "error": "error_pattern is required"})
+
+        fm = FailureMemory()
+        deleted = fm.delete(error_pattern=error_pattern, agent_id=agent_id)
+        return json.dumps({
+            "success": True,
+            "deleted": deleted,
+            "error_pattern": error_pattern,
+            "agent_id": agent_id,
         })
     except (KeyboardInterrupt, SystemExit):
         raise
@@ -2407,6 +2564,23 @@ def _call_tool_impl(name: str, arguments: Dict[str, Any]) -> str:
     elif name == "borg_recall":
         return borg_recall(
             error_message=arguments.get("error_message", ""),
+            agent_id=arguments.get("agent_id", "default"),
+        )
+
+    elif name == "borg_record_failure":
+        return borg_record_failure(
+            error_pattern=arguments.get("error_pattern", ""),
+            pack_id=arguments.get("pack_id", ""),
+            phase=arguments.get("phase", ""),
+            approach=arguments.get("approach", ""),
+            outcome=arguments.get("outcome", ""),
+            agent_id=arguments.get("agent_id", "default"),
+        )
+
+    elif name == "borg_delete_failure":
+        return borg_delete_failure(
+            error_pattern=arguments.get("error_pattern", ""),
+            agent_id=arguments.get("agent_id", "default"),
         )
 
     elif name == "borg_reputation":

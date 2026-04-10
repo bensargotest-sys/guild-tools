@@ -276,16 +276,30 @@ def borg_search(query: str, mode: str = "text", requesting_agent_id: str = None,
                 pass
 
         # Text search (default)
+        # For seed packs (source="seed"), use OR matching: any query term hits.
+        # For regular packs, require ALL terms (AND matching) to avoid noise.
+        # This handles queries like "NoneType has no attribute" where the pack
+        # contains "null pointer" and "attribute" but not "has" or "no".
+        query_terms = query_lower.split()
+        seed_pack_ids = {p.get("id") for p in all_packs if p.get("source") == "seed"}
         matches = []
         for pack in all_packs:
             searchable = " ".join([
                 pack.get("name", ""),
                 pack.get("problem_class", ""),
                 pack.get("id", ""),
+                pack.get("search_text", ""),  # seed packs include solution text
                 " ".join(pack.get("phase_names", [])),
             ]).lower()
 
-            if query_lower in searchable:
+            is_seed = pack.get("id") in seed_pack_ids
+            if is_seed:
+                # OR: any query term matches (seed packs are broad, avoid zero results)
+                matched = any(term in searchable for term in query_terms)
+            else:
+                # AND: all query terms must match (avoid noise in curated packs)
+                matched = all(term in searchable for term in query_terms)
+            if matched:
                 matches.append(pack)
 
         # v3.2.4 observe→search roundtrip fix: also surface relevant traces.

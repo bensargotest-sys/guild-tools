@@ -152,6 +152,7 @@ class DojoPipeline:
         # Step 5: Feed borg modules
         self._feed_aggregator()
         self._feed_nudge()
+        self._feed_thompson_sampling()
         self._feed_reputation()
 
         return report
@@ -272,6 +273,26 @@ class DojoPipeline:
             logger.debug("nudge unavailable -- skipping")
         except Exception as e:
             logger.warning("nudge feed failed: %s", e)
+
+    def _feed_thompson_sampling(self) -> None:
+        """Ingest session analysis outcomes into the V3 Thompson Sampling selector.
+
+        This closes the loop: Dojo's failure reports become priors for
+        ContextualSelector.record_outcome() so BorgV3.search() makes better
+        pack selections on subsequent tasks.
+        """
+        if self._analysis is None:
+            return
+        try:
+            from borg.core.contextual_selector import ContextualSelector
+            from borg.core.v3_integration import _StubFeedbackLoop
+            selector = ContextualSelector(feedback_loop=_StubFeedbackLoop())
+            for outcome in (self._analysis.outcomes or []):
+                selector.record_outcome(outcome.pack_id, outcome.category, outcome.successful)
+        except ImportError:
+            logger.debug("ContextualSelector unavailable -- skipping")
+        except Exception as e:
+            logger.warning("Thompson sampling feed failed: %s", e)
 
     def _feed_reputation(self) -> None:
         if self._analysis is None:

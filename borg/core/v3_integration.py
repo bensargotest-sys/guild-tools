@@ -149,11 +149,15 @@ class _StubMutationEngine:
 class _StubFeedbackLoop:
     """No-op feedback loop used when borg.core.feedback_loop is unavailable."""
 
-    def record(self, pack_id, task_context, success, tokens_used=0, time_taken=0, agent_id=None):
+    def record(self, pack_id, task_context=None, success=False, tokens_used=0, time_taken=0, agent_id=None, category=None):
         pass
 
     def get_signals(self, pack_id=None):
         return []
+
+    @property
+    def aggregator(self):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -349,10 +353,17 @@ class BorgV3:
         self._last_ab_context = None
         if out and out[0].get("ab_test"):
             ab_info = out[0]["ab_test"]
-            self._last_ab_context = {
-                "test_id": ab_info.get("test_id", ""),
-                "variant": ab_info.get("variant", ""),
-            }
+            # ab_info may be a string (test_id only) or a dict with test_id/variant
+            if isinstance(ab_info, dict):
+                self._last_ab_context = {
+                    "test_id": ab_info.get("test_id", ""),
+                    "variant": ab_info.get("variant", ""),
+                }
+            elif isinstance(ab_info, str):
+                self._last_ab_context = {
+                    "test_id": ab_info,
+                    "variant": "",
+                }
 
         return out
 
@@ -406,12 +417,13 @@ class BorgV3:
     def record_outcome(
         self,
         pack_id: str,
-        task_context: Optional[Dict[str, Any]],
-        success: bool,
+        task_context: Optional[Dict[str, Any]] = None,
+        success: bool = False,
         tokens_used: int = 0,
         time_taken: float = 0.0,
         agent_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        category: Optional[str] = None,
     ) -> None:
         """Record a pack execution outcome.
 
@@ -428,47 +440,92 @@ class BorgV3:
             tokens_used:  Number of tokens consumed (for cost tracking).
             time_taken:   Seconds elapsed (for latency tracking).
             agent_id:     Optional agent identifier for per-agent stats.
+            category:     Optional explicit category; if None, derived from task_context.
         """
-        # Determine task category
-        category = "other"
-        if task_context:
-            if classify_task is not None:
-                category = classify_task(
-                    task_type=task_context.get("task_type"),
-                    error_type=task_context.get("error_type"),
-                    language=task_context.get("language"),
-                    keywords=task_context.get("keywords"),
-                    file_path=task_context.get("file_path"),
-                ) or "other"
-            elif task_context.get("task_type"):
-                category = task_context["task_type"]
+        # Determine task category — use explicit if provided, else derive
+        if category is None:
+            category = "other"
+            if task_context:
+                if classify_task is not None:
+                    category = classify_task(
+                        task_type=task_context.get("task_type"),
+                        error_type=task_context.get("error_type"),
+                        language=task_context.get("language"),
+                        keywords=task_context.get("keywords"),
+                        file_path=task_context.get("file_path"),
+                    ) or "other"
+                elif task_context.get("task_type"):
+                    category = task_context["task_type"]
 
         ts = datetime.now(timezone.utc).isoformat()
+        _e2e_call_id = getattr(self, '_e2e_call_counter', 0) + 1
+        if not hasattr(self, '_e2e_call_counter'):
+            self._e2e_call_counter = 0
+        self._e2e_call_counter = _e2e_call_id
+        _tag = f"[E2E-{_e2e_call_id:03d}]"
+
+        print(f"{_tag} record_outcome() CALLED — pack_id={pack_id!r} success={success} category={category!r}")
 
         # 1. Persist to SQLite
-        with self._conn() as conn:
-            conn.execute(
-                """INSERT INTO outcomes
-                   (pack_id, agent_id, task_category, success, tokens_used, time_taken, timestamp)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (pack_id, agent_id, category, int(success), tokens_used, time_taken, ts),
-            )
-            conn.commit()
+        print(f"{_tag}   PATH-1 (SQLite): attempting write to outcomes table...")
+        try:
+            with self._conn() as conn:
+                conn.execute(
+                    """INSERT INTO outcomes
+                       (pack_id, agent_id, task_category, success, tokens_used, time_taken, timestamp)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (pack_id, agent_id, category, int(success), tokens_used, time_taken, ts),
+                )
+                conn.commit()
+            print(f"{_tag}   PATH-1 (SQLite): SUCCESS — row written")
+        except Exception as e:
+            print(f"{_tag}   PATH-1 (SQLite): FAILED — {type(e).__name__}: {e}")
 
-        # 2. Feed the contextual selector
-        self._selector.record_outcome(pack_id, category, success)
+        # 0.5: Write to FailureMemory on failure
+        if not success and self._failure_memory is not None:
+            error_msg = task_context.get("error_message") if task_context else None
+            if error_msg:
+                try:
+                    self._failure_memory.record_failure(
+                        error_pattern=error_msg,
+                        pack_id=pack_id,
+                        phase="record_outcome",
+                        approach=f"success={success} category={category}",
+                        outcome="failure",
+                    )
+                    print(f"{_tag}   PATH-0.5 (FailureMemory): recorded failure for error_pattern={error_msg!r}")
+                except Exception as fm_e:
+                    print(f"{_tag}   PATH-0.5 (FailureMemory): FAILED — {type(fm_e).__name__}: {fm_e}")
+
+        # 2. Feed the contextual selector (Thompson Sampling — inline, real-time)
+        # TASK 4: This fires immediately on every record_outcome() call — no wait
+        # for dojo cron. PATH-2 IS the _feed_thompson_sampling() inline wiring.
+        print(f"{_tag}   PATH-2 (ContextualSelector.record_outcome): calling with pack={pack_id!r} cat={category!r} success={success}")
+        try:
+            self._selector.record_outcome(pack_id, category, success)
+            print(f"{_tag}   PATH-2 (ContextualSelector): SUCCESS — Thompson Sampling updated inline")
+        except Exception as e:
+            print(f"{_tag}   PATH-2 (ContextualSelector): FAILED — {type(e).__name__}: {e}")
 
         # 3. Feed the feedback loop (defensively check for record method)
+        print(f"{_tag}   PATH-3 (FeedbackLoop.record): hasattr={hasattr(self._feedback, 'record')}...")
         try:
             if hasattr(self._feedback, "record"):
-                self._feedback.record(
-                    pack_id=pack_id,
-                    task_context=task_context,
-                    success=success,
-                    tokens_used=tokens_used,
-                    time_taken=time_taken,
-                    agent_id=agent_id,
-                )
+                try:
+                    self._feedback.record(
+                        pack_id=pack_id,
+                        task_context=task_context,
+                        success=success,
+                        tokens_used=tokens_used,
+                        time_taken=time_taken,
+                        agent_id=agent_id,
+                    )
+                    print(f"{_tag}   PATH-3 (FeedbackLoop.record): SUCCESS")
+                except Exception as inner_e:
+                    print(f"{_tag}   PATH-3 (FeedbackLoop.record): RAISED — {type(inner_e).__name__}: {inner_e}")
+                    raise
+            else:
+                print(f"{_tag}   PATH-3 (FeedbackLoop.record): SKIPPED — no .record method")
         except Exception as e:
             logger.warning("FeedbackLoop.record failed: %s", e)
 
@@ -476,6 +533,7 @@ class BorgV3:
         # Priority: (a) in-memory A/B context from search() →
         #           (b) session_id path (MCP users) →
         #           (c) skip (CLI without prior search)
+        print(f"{_tag}   PATH-4 (MutationEngine): hasattr={hasattr(self._mutation, 'record_outcome')} ab_ctx={self._last_ab_context} session_id={session_id}")
         try:
             if hasattr(self._mutation, "record_outcome"):
                 ab_recorded = False
@@ -485,12 +543,15 @@ class BorgV3:
                     test_id = self._last_ab_context.get("test_id", "")
                     variant = self._last_ab_context.get("variant", "")
                     if test_id and variant:
+                        print(f"{_tag}   PATH-4a (MutationEngine A/B path): test_id={test_id!r} variant={variant!r}")
                         self._mutation.record_outcome(test_id, variant, success)
                         ab_recorded = True
-                        self._last_ab_context = None  # clear after use
+                        self._last_ab_context = None
+                        print(f"{_tag}   PATH-4a: SUCCESS")
 
                 # Path (b): fall back to session_id (MCP users)
                 if not ab_recorded and session_id:
+                    print(f"{_tag}   PATH-4b (MutationEngine session_id path): session_id={session_id!r}")
                     try:
                         from borg.core import session as session_module
                         session = session_module.get_session(session_id) or {}
@@ -498,18 +559,22 @@ class BorgV3:
                         if sv:
                             self._mutation.record_outcome(sv["test_id"], sv["variant"], success)
                             ab_recorded = True
-                    except Exception:
-                        pass
+                            print(f"{_tag}   PATH-4b: SUCCESS")
+                        else:
+                            print(f"{_tag}   PATH-4b: no selected_variant in session")
+                    except Exception as e:
+                        print(f"{_tag}   PATH-4b: FAILED — {type(e).__name__}: {e}")
 
                 # Path (d): no A/B context — feed mutation engine directly for drift tracking
                 if not ab_recorded:
-                    try:
-                        self._mutation.record_outcome(pack_id, category, success, tokens_used, time_taken)
-                    except TypeError:
-                        # Real MutationEngine.record_outcome(test_id, variant, success) doesn't
-                        # accept extended params — skip silently in that case
-                        pass
+                    # MutationEngine.record_outcome(test_id, variant, success) is A/B-only.
+                    # No standalone pack drift-tracking method exists — skip explicitly.
+                    print(f"{_tag}   PATH-4c (MutationEngine): SKIPPED — no A/B context")
+                    pass
+            else:
+                print(f"{_tag}   PATH-4 (MutationEngine): SKIPPED — no .record_outcome method")
         except Exception as e:
+            print(f"{_tag}   PATH-4 (MutationEngine): EXCEPTION — {type(e).__name__}: {e}")
             logger.warning("MutationEngine.record_outcome failed: %s", e)
 
     # -------------------------------------------------------------------------

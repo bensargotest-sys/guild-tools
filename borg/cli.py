@@ -111,6 +111,23 @@ def _cmd_try(args: argparse.Namespace) -> int:
     from borg.core.search import borg_try
 
     raw = borg_try(args.uri)
+    db_path = os.path.expanduser("~/.hermes/guild/borg_v3.db")
+
+    # TASK 1: autonomous outcome inference — borg_try completes without exception → success
+    try:
+        from borg.core.v3_integration import BorgV3
+        v3 = BorgV3(db_path=db_path)
+        success = json.loads(raw).get("success", False)
+        v3.record_outcome(
+            pack_id=json.loads(raw).get("id", args.uri),
+            agent_id="borg-cli",
+            task_context={"uri": args.uri, "task_category": "try"},
+            success=success,
+            category="try",
+        )
+    except Exception:
+        pass  # never break core flow
+
     if args.json:
         _print_json(raw)
         return 0 if json.loads(raw).get("success") else 1
@@ -183,6 +200,21 @@ def _cmd_init(args: argparse.Namespace) -> int:
     pack_file.write_text(content, encoding="utf-8")
     print(f"Created pack scaffold: {pack_file}")
     print(f"Edit {pack_file} to define your phases and prompts.")
+
+    # TASK 1: autonomous outcome inference — init succeeds → record success
+    try:
+        from borg.core.v3_integration import BorgV3
+        v3 = BorgV3(db_path=os.path.expanduser("~/.hermes/guild/borg_v3.db"))
+        v3.record_outcome(
+            pack_id=name,
+            agent_id="borg-cli",
+            task_context={"task_category": "init", "problem_class": problem_class},
+            success=True,
+            category="init",
+        )
+    except Exception:
+        pass  # never break core flow
+
     return 0
 
 
@@ -190,15 +222,20 @@ def _cmd_apply(args: argparse.Namespace) -> int:
     """Start applying a pack to a task."""
     from borg.core.apply import apply_handler
 
-    raw = apply_handler(
-        action="start",
-        pack_name=args.pack,
-        task=args.task,
-    )
-    if args.json:
-        _print_json(raw)
-        return 0 if json.loads(raw).get("success") else 1
-    if _require_success(raw, ctx=" (pack not found)"):
+    pack_name = args.pack
+    task = args.task
+    db_path = os.path.expanduser("~/.hermes/guild/borg_v3.db")
+
+    try:
+        raw = apply_handler(
+            action="start",
+            pack_name=pack_name,
+            task=task,
+        )
+        if not _require_success(raw, ctx=" (pack not found)"):
+            _print_json(raw)
+            return 1
+
         data = json.loads(raw)
         session_id = data.get("session_id", "?")
         phases = data.get("phases", [])
@@ -209,10 +246,40 @@ def _cmd_apply(args: argparse.Namespace) -> int:
         print("Session started. In your agent (MCP), use:")
         print(f"  borg_apply(action='checkpoint', session_id='{session_id}', phase_result='done')")
         print("to advance through each phase. Or use borg_search to find the pack first.")
-    else:
-        _print_json(raw)
+
+        # TASK 1: autonomous outcome inference — record success when apply completes cleanly
+        try:
+            from borg.core.v3_integration import BorgV3
+            v3 = BorgV3(db_path=db_path)
+            v3.record_outcome(
+                pack_id=pack_name,
+                agent_id="borg-cli",
+                task_context={"task": task, "task_category": "apply"},
+                success=True,
+                category="apply",
+            )
+        except Exception:
+            pass  # never break core flow
+
+        return 0
+
+    except Exception as e:
+        # TASK 1: autonomous outcome inference — record failure with exception as error_message
+        try:
+            from borg.core.v3_integration import BorgV3
+            v3 = BorgV3(db_path=db_path)
+            v3.record_outcome(
+                pack_id=pack_name,
+                agent_id="borg-cli",
+                task_context={"task": task, "task_category": "apply", "error_message": str(e)},
+                success=False,
+                category="apply",
+            )
+        except Exception:
+            pass  # never break core flow
+
+        _print_json(json.dumps({"success": False, "error": str(e)}))
         return 1
-    return 0
 
 
 def _cmd_publish(args: argparse.Namespace) -> int:
@@ -295,6 +362,58 @@ def _cmd_feedback_v3(args: argparse.Namespace) -> int:
         return 0
     except Exception as e:
         print(f"Error recording outcome: {e}", file=sys.stderr)
+        return 1
+
+
+def _cmd_recall(args: argparse.Namespace) -> int:
+    """Query FailureMemory for prior failure/success approaches to an error.
+
+    Usage: borg recall 'NoneType has no attribute'
+    """
+    error_message = " ".join(args.error)
+    if not error_message:
+        print("Error: provide an error message to recall", file=sys.stderr)
+        return 1
+
+    try:
+        from borg.core.failure_memory import FailureMemory
+        fm = FailureMemory()
+        result = fm.recall(error_message)
+
+        if not result:
+            print(f"No prior failures recorded for: {error_message}")
+            return 0
+
+        wrong = result.get("wrong_approaches", [])
+        correct = result.get("correct_approaches", [])
+
+        print(f"Prior failures for: {error_message}")
+        print(f"  Wrong approaches (avoid): {len(wrong)}")
+        for w in wrong[:5]:
+            print(f"    • {w.get('approach', 'unknown')} — failed {w.get('failure_count', 0)}x")
+        if correct:
+            print(f"  Correct approaches (prefer): {len(correct)}")
+            for c in correct[:3]:
+                print(f"    ✓ {c.get('approach', 'unknown')} — succeeded {c.get('success_count', 0)}x")
+
+        # TASK 3: also inject into Thompson Sampling — record recall event so the
+        # selector knows this error class has known solutions (or none yet)
+        try:
+            from borg.core.v3_integration import BorgV3
+            v3 = BorgV3(db_path=os.path.expanduser("~/.hermes/guild/borg_v3.db"))
+            v3.record_outcome(
+                pack_id="recall-query",
+                agent_id="borg-cli",
+                task_context={"task_category": "recall", "error_message": error_message},
+                success=bool(correct),
+                category="recall",
+            )
+        except Exception:
+            pass  # never break core flow
+
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
         return 1
 
 
@@ -1220,7 +1339,16 @@ def main() -> int:
     )
     p.set_defaults(func=_cmd_debug)
 
-    # guild convert <path> [--format auto|skill|claude|cursorrules]
+    # borg recall <error> — query FailureMemory for prior failure/success approaches
+    p = sub.add_parser("recall", help="Query prior failure memory for an error message",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Examples:
+  borg recall 'NoneType has no attribute'
+  borg recall 'ModuleNotFoundError'""")
+    p.add_argument("error", nargs="+", help="Error message to look up")
+    p.set_defaults(func=_cmd_recall)
+
+    # borg convert <path> [--format auto|skill|claude|cursorrules]
     p = sub.add_parser("convert", help="Convert SKILL.md / CLAUDE.md / .cursorrules to workflow pack",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Examples:

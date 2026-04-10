@@ -150,7 +150,11 @@ def _fetch_index() -> dict:
     except Exception as e:
         if _index_cache[0] is not None:
             return _index_cache[0]
-        raise ValueError(f"Failed to fetch guild index: {e}")
+        # Don't fail search when remote index is unreachable — seeds still work.
+        # Log at debug level so production users aren't affected by network issues.
+        import logging
+        logging.getLogger("borg.uri").debug("Index fetch failed, using empty index: %s", e)
+        return {"packs": []}
 
 
 # ---------------------------------------------------------------------------

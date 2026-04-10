@@ -6,7 +6,7 @@ metadata:
   borg:
     version: "2.0"
     type: collective-intelligence-cache
-    homepage: https://github.com/punkrocker/agent-borg
+    homepage: https://github.com/bensargotest-sys/agent-borg
     registry: borg://registry
 ---
 
@@ -144,4 +144,4 @@ borg feedback <session-id>
 
 ---
 
-*Powered by [borg](https://github.com/punkrocker/agent-borg) — collective intelligence for AI agents.*
+*Powered by [borg](https://github.com/bensargotest-sys/agent-borg) — collective intelligence for AI agents.*

@@ -11,7 +11,7 @@ Pure Python implementation using only stdlib dependencies.
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import math
 
 
@@ -493,7 +493,7 @@ class FeedbackLoop:
         """
         self._signals.append(signal)
 
-        # Update aggregator
+        # Update aggregator with the new signal
         self.aggregator.add_signal(signal)
 
         # Update free-rider tracker based on signal type
@@ -506,6 +506,30 @@ class FeedbackLoop:
             signal.value,
             signal.timestamp
         )
+
+    def record(
+        self,
+        pack_id: str,
+        task_context: Optional[Dict[str, Any]],
+        success: bool,
+        tokens_used: int = 0,
+        time_taken: float = 0.0,
+        agent_id: Optional[str] = None,
+    ) -> None:
+        """Record an outcome signal for BorgV3 pipeline integration.
+
+        Mirrors _StubFeedbackLoop.record() signature so BorgV3 can call
+        self._feedback.record(...) unconditionally without hasattr checks.
+        """
+        signal = FeedbackSignal(
+            agent_id=agent_id or "borgv3",
+            pack_id=pack_id,
+            signal_type=SignalType.IMPLIED_USAGE,
+            value=1.0 if success else 0.0,
+            timestamp=datetime.now(timezone.utc),
+            task_context=task_context or {},
+        )
+        self.record_signal(signal)
 
     def get_pack_quality(self, pack_id: str) -> QualityReport:
         """

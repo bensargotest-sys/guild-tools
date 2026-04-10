@@ -1,39 +1,37 @@
 #!/usr/bin/env python3
-"""Debug script to replicate exact test conditions."""
-import sys
+import sys, time
 sys.path.insert(0, '/root/hermes-workspace/borg')
 
-from unittest.mock import patch
-from pathlib import Path
-import json
-import pytest
+from borg.core.uri import _fetch_index
+from borg.core.seeds import get_seed_packs
 
-# Load the actual index from the test's expected location
-PACKS_INDEX_PATH = Path("/root/hermes-workspace/guild-packs/index.json")
+# Time the index fetch
+t0 = time.time()
+try:
+    index = _fetch_index()
+    print(f"_fetch_index: {time.time()-t0:.1f}s, packs: {len(index.get('packs', []))}")
+except Exception as e:
+    print(f"_fetch_index failed: {e}")
 
-def _load_index() -> dict:
-    with open(PACKS_INDEX_PATH, encoding="utf-8") as f:
-        import json
-        return json.load(f)
+# Check seeds
+seed_packs = get_seed_packs()
+print(f"Seed packs: {len(seed_packs)}")
+for sp in seed_packs[:3]:
+    d = sp.to_search_dict()
+    print(f"  {d['name']}: id={d['id']!r}, problem_class={d['problem_class']!r}, phase_names={d['phase_names']}")
 
-fake_index = _load_index()
-print(f"Loaded index with {len(fake_index.get('packs', []))} packs")
-print(f"First 5 packs: {[p['name'] for p in fake_index['packs'][:5]]}")
+# Now do a simple text match simulation
+print("\n--- Text search simulation ---")
+query = "NoneType has no attribute"
+query_terms = set(query.lower().split())
+print(f"Query terms: {query_terms}")
 
-# Test with first pack name from ALL_PACK_NAMES
-test_pack_name = "systematic-debugging"
-print(f"\nTesting with pack name: {test_pack_name}")
-
-# Clear any cached imports
-for mod in list(sys.modules.keys()):
-    if mod.startswith('borg'):
-        del sys.modules[mod]
-
-with patch('borg.core.search._fetch_index', return_value=fake_index):
-    with patch('borg.core.search.BORG_DIR', Path('/nonexistent')):
-        from borg.core.search import borg_search
-        result = json.loads(borg_search(test_pack_name))
-        print(f'Result success: {result.get("success")}')
-        matched_names = [m.get("name") for m in result.get("matches", [])]
-        print(f'Matched names: {matched_names}')
-        print(f'Pack "{test_pack_name}" found: {test_pack_name in matched_names}')
+# Build corpus from seeds
+for sp in seed_packs:
+    d = sp.to_search_dict()
+    name = d['name'].lower().replace('-', ' ')
+    pc = d['problem_class'].lower()
+    phases = ' '.join(d['phase_names']).lower()
+    text = f"{name} {pc} {phases}"
+    matched = bool(query_terms & set(text.split()))
+    print(f"  {d['name']}: match={matched} | text={text[:80]}")

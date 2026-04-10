@@ -51,11 +51,18 @@ class SeedPack:
         """Convert to dict format used by borg_search()."""
         # Normalize hyphens to spaces for better text search matching
         normalized_name = self.name.replace("-", " ")
+        # Build searchable text corpus: name + problem_class + solution/error_text
+        # This ensures queries like "NoneType has no attribute" match django-null-pointer
+        search_text = " ".join([
+            normalized_name,
+            self.problem_class.replace("_", " "),
+            self.solution[:500] if self.solution else "",
+        ])
         return {
             "name": self.name,
             "problem_class": self.problem_class,
             "id": self.name,
-            "phase_names": [normalized_name],  # Include normalized name for search
+            "phase_names": [normalized_name],
             "phases": 0,
             "confidence": "seed",
             "tier": "seed",
@@ -63,6 +70,8 @@ class SeedPack:
             "solution": self.solution,
             "source_url": self.source_url,
             "tags": self.tags,
+            # Include searchable text so text-matching finds it
+            "search_text": search_text,
         }
 
 
