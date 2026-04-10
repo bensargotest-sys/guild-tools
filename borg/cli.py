@@ -42,6 +42,29 @@ def _print_json(raw: str) -> None:
         print(raw)
 
 
+def _load_builtin_packs() -> list:
+    """Load packs from the built-in guild-packs directory.
+    
+    This provides a fallback when no local packs are available.
+    """
+    import pathlib
+    import yaml
+    
+    packs = []
+    guild_packs_dir = pathlib.Path("/root/hermes-workspace/guild-packs/packs")
+    
+    if guild_packs_dir.exists():
+        for pack_file in guild_packs_dir.glob("*.yaml"):
+            try:
+                pack_data = yaml.safe_load(pack_file.read_text(encoding="utf-8"))
+                if isinstance(pack_data, dict) and pack_data.get("type") == "workflow_pack":
+                    packs.append(pack_data)
+            except Exception:
+                continue
+    
+    return packs
+
+
 def _require_success(raw: str, ctx: str = "") -> bool:
     """Print error and return False if the JSON result has success=False."""
     try:
@@ -534,10 +557,81 @@ def _cmd_start(args: argparse.Namespace) -> int:
 
 
 def _cmd_convert(args: argparse.Namespace) -> int:
-    """Convert a SKILL.md, CLAUDE.md, or .cursorrules file to a workflow pack."""
+    """Convert a SKILL.md, CLAUDE.md, or .cursorrules file to a workflow pack.
+    
+    Also supports --format=openclaw to convert the entire pack registry
+    to an OpenClaw skill directory.
+    """
     import yaml
     from borg.core.convert import convert_auto, convert_skill, convert_claude_md, convert_cursorrules
     try:
+        # Handle OpenClaw format (registry-wide conversion)
+        if args.format == "openclaw":
+            from borg.core.uri import get_available_pack_names
+            import pathlib
+            
+            # Collect all packs
+            packs = []
+            seen_ids: set = set()
+            
+            def _add_pack(pack_data):
+                """Add pack if not duplicate."""
+                if isinstance(pack_data, dict):
+                    pack_id = pack_data.get("id", "")
+                    if pack_id and pack_id not in seen_ids:
+                        seen_ids.add(pack_id)
+                        packs.append(pack_data)
+            
+            if args.all:
+                # Load all packs from local guild dir
+                pack_names = get_available_pack_names()
+                
+                HERMES_HOME = pathlib.Path(os.getenv("HERMES_HOME", pathlib.Path.home() / ".hermes"))
+                guild_dir = HERMES_HOME / "guild"
+                
+                for pack_name in pack_names:
+                    pack_yaml = guild_dir / pack_name / "pack.yaml"
+                    if pack_yaml.exists():
+                        try:
+                            pack_data = yaml.safe_load(pack_yaml.read_text(encoding="utf-8"))
+                            _add_pack(pack_data)
+                        except Exception:
+                            continue
+                
+                # Also load ALL packs from the guild-packs directory
+                guild_packs_dir = pathlib.Path("/root/hermes-workspace/guild-packs/packs")
+                if guild_packs_dir.exists():
+                    for pack_file in guild_packs_dir.glob("*.yaml"):
+                        try:
+                            pack_data = yaml.safe_load(pack_file.read_text(encoding="utf-8"))
+                            _add_pack(pack_data)
+                        except Exception:
+                            continue
+                
+                # Fallback: use the borg core registry if no packs found
+                if not packs:
+                    packs = _load_builtin_packs()
+            
+            if not packs:
+                print("Error: No packs found to convert", file=sys.stderr)
+                return 1
+            
+            # Convert to OpenClaw
+            from borg.core.convert import convert_registry_to_openclaw
+            output_dir = args.output or "./openclaw-skills"
+            result = convert_registry_to_openclaw(packs, output_dir)
+            
+            print(f"Converted {result['pack_count']} packs to OpenClaw skill format")
+            print(f"Output directory: {result['output_dir']}")
+            print(f"Files written: {result['files_written']}")
+            print(f"SKILL.md lines: {result['skill_md_lines']}")
+            
+            if result.get('pack_slugs'):
+                print(f"\nPack slugs: {', '.join(result['pack_slugs'])}")
+            
+            return 0
+        
+        # Handle individual file conversion
         if args.format == "auto":
             pack = convert_auto(args.path)
         elif args.format == "skill":
@@ -547,7 +641,7 @@ def _cmd_convert(args: argparse.Namespace) -> int:
         elif args.format == "cursorrules":
             pack = convert_cursorrules(args.path)
         else:
-            print(f"Error: Unknown format '{args.format}'. Use: auto, skill, claude, cursorrules", file=sys.stderr)
+            print(f"Error: Unknown format '{args.format}'. Use: auto, skill, claude, cursorrules, openclaw", file=sys.stderr)
             return 1
         print(yaml.safe_dump(pack, default_flow_style=False, sort_keys=False))
         return 0
@@ -1167,6 +1261,79 @@ def _cmd_autopilot(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# reputation: show agent reputation profile
+# ---------------------------------------------------------------------------
+
+def _cmd_reputation(args: argparse.Namespace) -> int:
+    """Show reputation profile for an agent."""
+    store = AgentStore()
+    engine = ReputationEngine(store)
+    profile = engine.build_profile(args.agent_id)
+
+    if profile.last_active_at:
+        last_active = profile.last_active_at.strftime("%Y-%m-%d %H:%M UTC")
+    else:
+        last_active = "never"
+
+    print(f"Reputation Profile for Agent: {args.agent_id}")
+    print("=" * 50)
+    print(f"  Contribution Score:  {profile.contribution_score:.2f}")
+    print(f"  Access Tier:         {profile.access_tier.value}")
+    print(f"  Free-Rider Status:    {profile.free_rider_status.value}")
+    print(f"  Packs Published:      {profile.packs_published}")
+    print(f"  Packs Consumed:       {profile.packs_consumed}")
+    print(f"  Last Active:         {last_active}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# status: show borg system status
+# ---------------------------------------------------------------------------
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    """Show borg system status."""
+    borg_dir = get_borg_dir()
+    db_path = borg_dir / "guild.db"
+
+    # Load persisted sessions to get accurate count
+    sessions = load_persisted_sessions()
+
+    # Count active (running) sessions
+    active_sessions = [s for s in sessions if s.get("status") == "running"]
+    active_from_memory = [s for s in _active_sessions.values() if s.get("status") == "running"]
+    all_running = {s["session_id"]: s for s in active_sessions + active_from_memory}.values()
+
+    # Count packs in store
+    store = AgentStore()
+    packs = store.list_packs(limit=10000)
+    pack_count = len(packs)
+
+    # Count agents
+    agents = store.list_agents(limit=10000)
+    agent_count = len(agents)
+
+    print(f"Borg System Status")
+    print("=" * 50)
+    print(f"  BORG_DIR:             {borg_dir}")
+    print(f"  Database:             {db_path}")
+    print(f"  Packs in Store:       {pack_count}")
+    print(f"  Active Sessions:      {len(list(all_running))}")
+    print(f"  Agent Count:          {agent_count}")
+
+    running = list(all_running)
+    if running:
+        print()
+        print("  Running Sessions:")
+        for s in running:
+            session_id = s.get("session_id", "?")
+            pack_name = s.get("pack_name", "?")
+            status = s.get("status", "?")
+            print(f"    • {session_id}  [{status}]  ({pack_name})")
+
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -1358,9 +1525,18 @@ def main() -> int:
     p.add_argument("path", help="Path to source file (SKILL.md, CLAUDE.md, or .cursorrules)")
     p.add_argument(
         "--format",
-        choices=["auto", "skill", "claude", "cursorrules"],
+        choices=["auto", "skill", "claude", "cursorrules", "openclaw"],
         default="auto",
-        help="Source format (default: auto-detect from filename)",
+        help="Source format (default: auto-detect from filename). Use 'openclaw' for registry-wide conversion.",
+    )
+    p.add_argument(
+        "--all",
+        action="store_true",
+        help="Convert all packs in the registry (use with --format=openclaw)",
+    )
+    p.add_argument(
+        "--output",
+        help="Output directory for OpenClaw conversion (default: ./openclaw-skills/)",
     )
     p.set_defaults(func=_cmd_convert)
 

@@ -200,7 +200,7 @@ class TestBorgSearchFindsPacks:
     """borg_search locates every pack by name (text search)."""
 
     @pytest.mark.network
-    @pytest.mark.parametrize("pack_name", ALL_PACK_NAMES)
+    @pytest.mark.parametrize("pack_name", UNIQUE_PACK_NAMES)
     def test_search_finds_pack(self, pack_name: str):
         fake_index = _load_index()
         with patch("borg.core.search._fetch_index", return_value=fake_index):

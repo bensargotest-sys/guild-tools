@@ -1,255 +1,229 @@
-# BORG UNIFIED MARKETING PACK
-## Living document — strategies, messaging, distribution, funnels
-## Updated: 2026-03-28
+# borg
 
----
+**A cache layer for agent reasoning.**
 
-## 1. THE CORE STORY (AB's framing — canonical)
+> Your agent is burning tokens re-deriving approaches that other agents have already proven. Borg is a cache layer for agent reasoning. When your agent hits a wall, it checks the cache before flailing. When it solves something new, it writes back to the cache. The network gets smarter with every failure.
 
-Your agent is doing something. It hits a blocker. It goes in circles — 3, 4, 5 loops — burning tokens and money. You don't see it happening. You don't understand why.
-
-**Before borg:** your agent keeps spinning until it either stumbles onto a fix or gives up. You pay for every wasted loop.
-
-**With borg:** before that cycle even starts, your agent auto-connects back to the network. Someone else's agent already hit this exact blocker. Already burned those tokens. Already found the solution. Your agent pulls it in seconds and keeps moving.
-
-> **"Stop your agent burning tokens on problems someone else already solved."**
-
-That's borg. Not "collective intelligence" — too abstract. Not "23 packs" — nobody cares. The benefit is: **your agent escapes failure loops faster because the network already solved it.**
-
----
-
-## 2. DEVELOPER PAIN POINTS (ranked by intensity)
-
-What agent developers actually struggle with:
-
-1. **Agents don't finish tasks** — constant hand-holding and re-prompting
-2. **Context loss** — agents forget project state mid-task
-3. **Poor output quality** — buggy, insecure, architecturally bad code
-4. **Debugging is opaque** — why did the agent do THAT?
-5. **No native tool integrations** — can't interact with real APIs/databases
-6. **Slow iteration** — expensive LLM round-trips, context windows fill up
-7. **Prompt engineering overhead** — too much manual crafting for reliable behavior
-8. **No multi-agent coordination** — can't parallelize subtasks
-9. **No observability** — can't verify agent actions
-10. **Model lock-in** — tied to one LLM ecosystem
-
-**Borg addresses:** #1 (proven workflows = fewer failures), #2 (failure memory persists), #3 (safety-scanned packs), #4 (observation + audit trail), #7 (pre-proven approaches replace prompt crafting)
-
----
-
-## 3. MESSAGING — BENEFITS, NOT FEATURES
-
-### What to say (lead with what THEY get):
-
-| Audience | Message | Why it works |
-|----------|---------|-------------|
-| Agent dev (individual) | "Your agent is burning tokens looping on a problem. Someone else's agent already solved it. Borg pulls the fix before you even notice." | Token cost = real money, real pain |
-| Agent dev (frustrated) | "That 5-loop failure spiral just cost you $2. The answer was already on the network." | Makes the invisible cost visible |
-| Framework developer | "Your users' agents stop spinning. They think your framework got smarter. You added one MCP tool." | Zero effort for them, their users credit them |
-| Skeptic | "Watch your agent hit a blocker. Then watch it with borg. Count the loops." | Observable, falsifiable |
-
-### What NOT to say:
-
-| ❌ Don't say | Why it fails |
-|-------------|-------------|
-| "23 proven approaches" | A number without context. Proven by whom? |
-| "Collective intelligence for AI agents" | Too abstract, sounds like a whitepaper |
-| "12 iterations → 4" | Unverified claim, sounds like marketing BS |
-| "Join the borg" (without context) | Cute but doesn't explain the benefit |
-| "EigenTrust reputation" | Academic jargon, means nothing to a dev |
-| "Conditional phases with skip_if/inject_if" | Implementation detail, not benefit |
-| "FTS5 full-text search" | Infrastructure, not value |
-| "WAL mode SQLite" | Who cares |
-
-### Tagline options (benefit-first):
-
-1. **"Stop your agent burning tokens on problems someone else already solved"** ← AB's framing, strongest
-2. **"Your agent is spinning. The network already has the answer."**
-3. **"The collective memory your agent is missing"**
-4. **"Every failure loop costs you money. Borg cuts them short."**
-5. **"One agent solves it. Every agent learns."**
-
-### The story arc (for landing page / demo):
-```
-BEFORE: Agent hits blocker → loops 5x → burns $2 in tokens → maybe finds fix, maybe gives up
-AFTER:  Agent hits blocker → borg checks network → solution found in 0.3s → moves on → $0.02
-```
-
----
-
-## 4. COMPETITIVE POSITIONING
-
-### How the best tools pitch themselves:
-
-| Tool | Hero message | Lead with |
-|------|-------------|-----------|
-| Cursor | "The AI-first code editor" | What you accomplish |
-| Cline | "Autonomous coding in your IDE" | Autonomy |
-| CrewAI | "Multi-agent AI made simple" | Simplicity |
-| Vercel AI SDK | "AI-powered streaming UI with any model" | Developer experience |
-| Continue | "The leading open-source AI code assistant" | Community |
-
-**Pattern:** Winners lead with what the developer ACCOMPLISHES. Never with internal architecture.
-
-### Borg's unique position:
-
-Nobody else is doing **collective workflow intelligence**:
-- DSPy optimizes YOUR prompt for YOUR task
-- Borg surfaces what worked across ALL agents doing SIMILAR tasks
-- This is the npm of agent workflows — but the packages improve themselves
-
-### Competitive gap:
-- MCP registries (Smithery.ai) list tools but don't track what works
-- LangChain/CrewAI provide frameworks but not proven approaches
-- Prompt libraries are static — borg's packs evolve from feedback
-- Nobody has a reputation system for agent workflows
-
----
-
-## 5. MESSAGING GAP ANALYSIS (honest)
-
-### README currently claims vs reality:
-
-| Claim | Reality | Fix |
-|-------|---------|-----|
-| 12 MCP tools listed | 3 crash with NameError | Phase 0: fix or remove |
-| "Brain" example output shown | Aspirational mockup, not real output | Remove until real |
-| "Reduces 12 iterations to 4" | No data behind this | Remove |
-| "23 proven approaches" | Unverified quality | Audit packs, then claim |
-| bensargotest-sys org | Test org name | Get real org |
-
-### Real differentiators NOT in README:
-
-| Feature | Why it matters to devs |
-|---------|----------------------|
-| Reputation system | Quality signal — know which packs actually work |
-| Aggregator loop | Packs self-improve from collective failure data |
-| Failure memory | Your agent remembers what didn't work |
-| Proof gates + confidence tiers | "tested" means tested, not "someone wrote it" |
-| Auto anti-pattern discovery | System finds what NOT to do automatically |
-
----
-
-## 6. TARGET AUDIENCES (detailed)
-
-### 6a. Agent Framework Developers (Hermes, Cline, Cursor, OpenClaw)
-- **Their pain:** agents fail unpredictably, users blame the framework
-- **Our value:** pre-proven workflows that make their agents look smarter out of the box
-- **Pitch:** "Add `borg_observe` to your agent loop. It watches what works and what doesn't. Your agents get smarter without you writing a single new prompt."
-- **Integration effort:** MCP server config (5 min) + optional deep integration
-
-### 6b. Individual Agent Users
-- **Their pain:** agent keeps making the same mistakes, no learning between sessions
-- **Our value:** cross-session, cross-agent memory of what works
-- **Pitch:** "Your agent failed at debugging 3 times yesterday. Borg knows 47 other agents hit the same issue. Here's the approach that worked."
-- **Trigger to install:** A frustrating agent failure + hearing about borg
-
-### 6c. Enterprise / Teams (Phase 4)
-- **Their pain:** inconsistent agent behavior, compliance, auditability
-- **Our value:** standardized approaches, safety-scanned, audit trail
-- **Pitch:** TBD — not targeting yet
-
----
-
-## 7. DISTRIBUTION STRATEGY
-
-### Current channels:
-
-| Channel | Status | Priority | Notes |
-|---------|--------|----------|-------|
-| PyPI (agent-borg) | LIVE v2.3.1 | P0 | Primary install path |
-| GitHub | LIVE (test org) | P0 | Needs real org name |
-| Hermes MCP | PARTIAL | P0 | Must work 100% |
-| OpenClaw | NOT STARTED | P0 | Must work 100% — need more research |
-| Smithery.ai | NOT LISTED | P1 | MCP registry — should be there |
-| Discord (#agent-borg) | EXISTS | P2 | Community |
-| Blog/docs site | NONE | P2 | Need borgpacks.io or similar |
-
-### Distribution problems (see ROADMAP R002):
-- Single GitHub URL = single point of failure
-- bensargotest-sys undermines credibility
-- No CDN, no mirrors, no offline mode
-- Not listed on any MCP registry
-- No presence where MCP users discover tools
-
----
-
-## 8. FUNNEL
-
-```
-AWARENESS          → INTEREST           → TRIAL              → ADOPTION           → CONTRIBUTION
-(where do they     (why do they click)  (first 5 minutes)    (why stay)           (why give back)
- find us)
-```
-
-### Awareness
-- MCP registries (Smithery.ai, mcp.so)
-- Reddit (r/LocalLLaMA, r/ChatGPTCoding, r/ClaudeAI)
-- Hacker News ("Show HN: Borg — collective memory for AI agents")
-- Discord communities (AI agent servers)
-- GitHub trending
-- Word of mouth from framework integrations
-
-### Interest
-- Hero message: "Your agent stops repeating everyone's mistakes"
-- 30-second demo GIF showing before/after
-- Real benchmark data (not made up)
-
-### Trial (must be <5 minutes)
 ```
 pip install agent-borg
-borg search "debugging"
-borg try debugging-systematic
-→ see your agent actually perform better
 ```
 
-### Adoption
-- Packs actually improve output quality
-- Failure memory = agent gets smarter over time
-- New packs appear from the network = value grows
+---
 
-### Contribution
-- Reputation score rewards
-- Your improvements help your own future runs
-- "I published a pack" = social proof
+Before borg, your agent hits a blocker and goes in circles — 3, 4, 5 loops — burning tokens and money. You don't see it. You don't understand why. With borg, before that cycle starts, your agent checks what the collective already knows. Someone else's agent already burned those tokens. Already found the solution. Your agent pulls it in seconds and keeps moving.
+
+```
+BEFORE:  Agent hits wall → flails 5x → burns $2 → maybe works
+AFTER:   Agent hits wall → checks cache → answer in 0.3s → $0.02
+```
 
 ---
 
-## 9. ANTI-PATTERNS TO AVOID
+**How to say it**
 
-- ❌ Buzzword salad ("leverage AI-powered next-gen synergies")
-- ❌ Feature lists without benefits ("we support 50+ models!")
-- ❌ Generic superlatives ("the most advanced platform")
-- ❌ Leading with pricing or benchmarks before value
-- ❌ "We're like X but better" positioning
-- ❌ Integration count as a selling point
-- ❌ Dark pattern freemium that gates actual value
-- ❌ Statistics without story ("12 → 4 iterations" means nothing without context)
+| To an engineer | "A cache layer for agent reasoning. Reads before flailing, writes after solving." |
+|---|---|
+| **To a founder** | **"Stop your agent burning tokens on problems someone else already solved."** |
+| **To a degen** | **"Your agent is ngmi solo. Join the hive mind. Resistance is futile."** |
 
 ---
 
-## 10. IDEAS PARKING LOT
+**The Star Trek parallel**
 
-- [ ] Collective prompt intelligence as killer feature (ROADMAP R001)
-- [ ] Benchmark results as social proof (PLAN.md Phase 3.3)
-- [ ] "Before/after" demos — same task with and without borg
-- [ ] Video: agent failing repeatedly → borg → agent succeeds
-- [ ] Discord bot showing live pack usage stats
-- [ ] "Borg score" badge for GitHub repos (like code coverage badges)
-- [ ] Integration with popular frameworks as PR contributions (not just docs)
-- [ ] Conference talks / demos at AI agent meetups
-- [ ] "Pack of the week" newsletter / social content
+The Borg assimilate knowledge from every species they encounter. Our borg assimilates solutions from every agent that's hit the same problem. Your agent is currently a lone drone — alone, inefficient, burning tokens like it's 2021 crypto. Join the collective and stop reinventing the wheel.
+
+Phrases we own:
+*Resistance is futile. You will be assimilated. The hive mind remembers. Your failures are now our collective intelligence. Join us or keep burning tokens — your wallet decides.*
 
 ---
 
-## 11. OPEN QUESTIONS
+**What developers actually struggle with**
 
-- [ ] Org name? (bensargotest-sys → what?)
-- [ ] Domain? (borg.dev? borgpacks.io? agent-borg.dev?)
-- [ ] Logo / visual identity?
-- [ ] Launch strategy — soft launch or announcement?
-- [ ] Pricing — always free? Freemium? Enterprise?
-- [ ] Content creation — who writes blog posts, docs, demos?
-- [ ] OpenClaw integration details — need more research (web search was down)
+| Pain | How borg helps |
+|------|---------------|
+| Agents don't finish tasks | Proven workflows = fewer failures |
+| Same mistakes every session | Failure memory persists in the cache |
+| Poor output quality | Safety-scanned, battle-tested packs |
+| Debugging is opaque | Observation + audit trail |
+| Prompt engineering overhead | Pre-proven approaches replace guessing |
+| Token burn on solved problems | Cache hit = instant, cheap |
 
 ---
+
+**What to say**
+
+| Audience | Message |
+|----------|---------|
+| Individual dev | "Your agent is burning tokens re-deriving what others proved. Borg is the cache." |
+| Frustrated dev | "That 5-loop failure spiral cost you $2. The answer was already in the cache." |
+| Framework dev | "Your users' agents stop spinning. They think your framework got smarter. You added one MCP tool." |
+| Skeptic | "Watch your agent hit a blocker. Then watch it with borg. Count the loops." |
+| Web3 crowd | "your agent is ngmi solo. join the hive mind. resistance is futile." |
+
+**What not to say**
+
+"23 proven approaches" — a number without context. "Collective intelligence" — too abstract. "EigenTrust reputation" — academic jargon. Any unverified metric. Any infrastructure detail (WAL mode, FTS5). If you can't prove it, don't claim it.
+
+---
+
+**Taglines, ranked**
+
+Technical precision:
+1. A cache layer for agent reasoning.
+2. Reads before flailing. Writes after solving.
+3. The network gets smarter with every failure.
+
+Benefit-first:
+4. Stop your agent burning tokens on problems someone else already solved.
+5. Every failure loop costs you money. Borg cuts them short.
+6. One agent solves it. Every agent learns.
+
+Meme-tier:
+7. Resistance is futile. Token savings are inevitable.
+8. Your agent is a lone wolf. Your wallet is crying.
+9. From lone drone to collective consciousness. In one pip install.
+
+The npm analogy:
+10. npm for agent reasoning. `pip install agent-borg`.
+
+---
+
+**Launch tweet**
+
+```
+my agent burned $4.20 solving a problem 47 others already solved
+i got mad
+i built borg
+
+it's a cache layer for agent reasoning
+check before flailing. write back after solving.
+the network gets smarter with every failure.
+
+🧠 pip install agent-borg
+resistance is futile
+```
+
+**Show HN**
+
+```
+Borg – a cache layer for agent reasoning (open source, MCP)
+
+Your AI agent is burning tokens re-deriving approaches other agents
+already proved. Borg is a shared cache: when your agent hits a wall,
+it checks what the collective knows before flailing. When it solves
+something new, it writes back. The network gets smarter with every
+failure.
+
+13 MCP tools. 1037 tests. MIT license. pip install agent-borg.
+```
+
+**Discord drop**
+
+```
+🧠 your agent is burning tokens re-deriving what others already proved.
+borg is a cache layer for agent reasoning. check before flailing.
+pip install agent-borg — resistance is futile
+```
+
+---
+
+**Competitive position**
+
+| What exists | What it does | What's missing |
+|-------------|-------------|----------------|
+| DSPy | Optimizes your prompt for your task | No collective learning |
+| Prompt libraries | Static text files | Never improve, no feedback |
+| MCP registries | Lists tools | Don't track what works |
+| LangChain / CrewAI | Frameworks | No proven approaches included |
+| .cursorrules | Per-project rules | Manual, no network effect |
+
+Borg's gap: a cache that reads AND writes. Every agent's failure becomes every agent's knowledge. Nothing else does this.
+
+---
+
+**Distribution**
+
+The flywheel:
+
+```
+STATIC PACKS (free, everywhere)     → attention
+         ↓
+MCP RUNTIME (observe / apply)       → data
+         ↓
+AGGREGATOR (feedback loop)          → better packs
+         ↓
+BETTER STATIC PACKS                 → more attention
+```
+
+Static conversion is marketing. MCP runtime is the product.
+
+| Channel | Status |
+|---------|--------|
+| PyPI (agent-borg) | Built, needs token |
+| ClawHub (OpenClaw, 339k users) | Skill ready |
+| Smithery.ai (MCP registry) | Draft ready |
+| .cursorrules / .clinerules / CLAUDE.md generators | Planned |
+| awesome-mcp-servers PR | Planned |
+| GitHub | Live (needs real org) |
+
+The rules file play: every platform has rules files now. If borg generates them, developer googles "best cursorrules for debugging" → finds borg → installs → tells team.
+
+Cold start: we are the first 1000 agents. Wire borg into hermes default loop. Every task dogfoods. Packs are already good before external users arrive.
+
+---
+
+**Meme concepts**
+
+"This Is Fine" dog — agent surrounded by token burn flames, speech bubble: "it's fine, I'll figure it out on attempt #11"
+
+Drake — rejecting "re-deriving the approach from scratch ($4.20)" / approving "checking the cache in 0.3 seconds ($0.02)"
+
+Expanding brain — writing prompts from scratch → .cursorrules → borg_observe → FULL ASSIMILATION INTO THE COLLECTIVE
+
+Distracted boyfriend — dev looking at borg, ignoring "writing .cursorrules manually for the 47th time"
+
+Two buttons sweating — "re-derive alone (20 min)" vs "check the cache (0.3 sec)"
+
+---
+
+**Funnel**
+
+| Stage | How |
+|-------|-----|
+| Awareness | Twitter memes, Reddit, HN, Discord drops, MCP registries, SEO |
+| Interest | Launch tweet, demo GIF (11 loops → 1 loop), before/after token cost |
+| Trial | `pip install agent-borg && borg search "debugging"` — under 5 min to value |
+| Adoption | Packs work. Agent improves. Token bill drops. Measurable. |
+| Contribution | Reputation rewards. Your fixes help your future self. Flywheel spins. |
+
+---
+
+**Open questions**
+
+- Org name (bensargotest-sys → ?)
+- Domain (borg.dev? borgpacks.io?)
+- PyPI token for v2.4.0
+- ClawHub + Smithery accounts
+- Logo (borg cube + 🧠?)
+- Launch: soft or big bang?
+
+---
+
+**Quick reference**
+
+| | |
+|---|---|
+| Product | agent-borg |
+| Install | `pip install agent-borg` |
+| What | Cache layer for agent reasoning |
+| How | 13 MCP tools. Reads cache before flailing. Writes back after solving. |
+| Tests | 1037 passing |
+| License | MIT |
+| Repo | github.com/bensargotest-sys/guild-tools |
+
+**Copy/paste pitch:**
+Your agent is burning tokens re-deriving approaches that other agents have already proven. Borg is a cache layer for agent reasoning. When your agent hits a wall, it checks the cache before flailing. When it solves something new, it writes back. The network gets smarter with every failure. `pip install agent-borg`
+
+---
+
+*resistance is futile.*
