@@ -23,7 +23,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install agent-borg from PyPI
-RUN pip install --no-cache-dir agent-borg
+RUN pip install --no-cache-dir agent-borg==3.3.0
 
 # Health check — verifies core tools are functional
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
